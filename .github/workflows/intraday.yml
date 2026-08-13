@@ -19,8 +19,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: phase1-intraday
-  cancel-in-progress: true
+  group: phase1-data-writes
+  cancel-in-progress: false
 
 jobs:
   snapshot:
@@ -34,11 +34,11 @@ jobs:
       - name: Generate current quote snapshot
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: |
-          if [ -z "$TWELVE_DATA_API_KEY" ]; then
-            echo "TWELVE_DATA_API_KEY is not configured; skipping intraday refresh."
-            exit 0
-          fi
           python scripts/intraday_snapshot.py
       - name: Commit snapshot when generated
         run: |
