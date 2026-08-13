@@ -53,6 +53,14 @@ def discover_universe():
         print("Universe discovery failed; using fallback:",e)
         return FALLBACK
 
+def market_regime(spy):
+    c=spy.Close.dropna()
+    if len(c)<200:return "UNKNOWN"
+    s50=c.rolling(50).mean().iloc[-1]; s200=c.rolling(200).mean().iloc[-1]; last=c.iloc[-1]
+    if last>s50>s200:return "RISK_ON"
+    if last<s50<s200:return "RISK_OFF"
+    return "MIXED"
+
 def analyze(symbol,df,spy):
     df=df.dropna(subset=["Close","High","Low","Volume"]).copy(); spy=spy.dropna(subset=["Close"]).copy()
     if len(df)<210 or len(spy)<210:return None
@@ -72,55 +80,78 @@ def analyze(symbol,df,spy):
     up=float(v[c.diff()>0].tail(20).sum()); down=float(v[c.diff()<0].tail(20).sum()); ud=up/down if down>0 else 2.0
     ob_slope=slope_pct(ob,20); persistence=float((c.pct_change().tail(20)>0).mean())
     macd_delta_pct=float((macd.iloc[-1]-sig.iloc[-1])/last*10000)
+    atr_pct=float(atr14.iloc[-1]/last*100)
 
     trend=0
     trend += 18 if last>sma20.iloc[-1] else 0; trend += 22 if last>sma50.iloc[-1] else 0
     trend += 20 if sma50.iloc[-1]>sma150.iloc[-1] else 0; trend += 20 if sma150.iloc[-1]>sma200.iloc[-1] else 0
     trend += 20 if slope_pct(sma200,20)>0 else 0
-    relative=clamp(50+rs20*180+rs63*120+rs126*70)
-    momentum=clamp(22+ret20*210+ret63*120+ret126*55+(float(rs14.iloc[-1])-50)*0.55+macd_delta_pct+persistence*18)
-    breakout=clamp((1+dist_high)*100)*.35+clamp(vol_ratio*45)*.25+clamp((ud-.7)*70)*.2+clamp(50+ob_slope*120)*.2
-    institutional=clamp(trend*.28+relative*.24+breakout*.24+clamp(50+ob_slope*150)*.12+clamp((ud-.5)*65)*.12)
 
-    atr_pct=float(atr14.iloc[-1]/last*100); liquidity=clamp((math.log10(max(dollar_vol,1))-5.5)*28)
-    has_private=any(os.getenv(k) for k in SECRET_NAMES)
-    validation=92 if has_private else 70; vol_quality=clamp(100-max(0,atr_pct-2.2)*12); agreement=100-abs(momentum-institutional)*.55
-    confidence=clamp(100*.2+validation*.2+liquidity*.15+vol_quality*.15+agreement*.2+trend*.1)
-    composite=clamp(momentum*.33+institutional*.31+trend*.16+relative*.20)
-    confluence=clamp(momentum*.24+confidence*.26+institutional*.20+trend*.12+relative*.18)
-    if confluence>=86 and confidence>=78: quality="A+"
-    elif confluence>=78 and confidence>=72: quality="A"
-    elif confluence>=68 and confidence>=64: quality="B"
-    else: quality="C"
-    if trend>=60 and relative>=55 and momentum>=60: bias="BULLISH"
-    elif trend<=40 and relative<=45 and momentum<=40: bias="BEARISH"
-    else: bias="NEUTRAL"
-    reference_level=float(sma20.iloc[-1]) if bias!="NEUTRAL" else float(sma50.iloc[-1])
-    label="ELITE MOMENTUM" if composite>=80 and confidence>=75 else "STRONG MOMENTUM" if composite>=68 and confidence>=65 else "WATCH" if composite>=55 else "WEAK"
-    evidence=[]
-    if last>sma50.iloc[-1]>sma150.iloc[-1]>sma200.iloc[-1]: evidence.append("Bullish MA stack")
-    if rs63>.05:evidence.append("Strong 3M relative strength")
-    if vol_ratio>1.4 and c.iloc[-1]>c.iloc[-2]:evidence.append("Volume-backed advance")
-    if ud>1.25:evidence.append("Accumulation-biased volume")
-    if ob_slope>0:evidence.append("OBV rising")
-    if float(rs14.iloc[-1])>70:evidence.append("RSI extended")
-    if atr_pct>5:evidence.append("High volatility risk")
-    if not has_private:evidence.append("No private cross-source validation")
     return {
       "symbol":symbol,"price":sf(last),"market_bar_date":pd.Timestamp(df.index[-1]).date().isoformat(),"change_1d_pct":sf(c.pct_change().iloc[-1]*100),
-      "momentum":round(momentum),"confidence":round(confidence),"confluence":round(confluence),"quality":quality,"bias":bias,"reference_level":sf(reference_level),
-      "institutional_proxy":round(institutional),"trend":round(trend),"relative_strength":round(relative),"composite":round(composite),"signal":label,
-      "rsi14":sf(rs14.iloc[-1]),"atr_pct":sf(atr_pct),"volume_ratio":sf(vol_ratio),"up_down_volume":sf(ud),"distance_52w_high_pct":sf(dist_high*100),
-      "return_20d_pct":sf(ret20*100),"return_63d_pct":sf(ret63*100),"rs_63d_vs_spy_pct":sf(rs63*100),"sma20":sf(sma20.iloc[-1]),"sma50":sf(sma50.iloc[-1]),
-      "sma150":sf(sma150.iloc[-1]),"sma200":sf(sma200.iloc[-1]),"high52":sf(hi52),"low52":sf(lo52),"anchor20":sf(p20),"anchor63":sf(p63),"anchor126":sf(p126),
-      "spy_ret20":sf(s20),"spy_ret63":sf(s63),"spy_ret126":sf(s126),"macd_delta_pct":sf(macd_delta_pct),"persistence20":sf(persistence),"sma200_slope_up":slope_pct(sma200,20)>0,
-      "evidence":evidence[:7],"private_validation_available":has_private
+      "trend":round(trend),"rsi14":sf(rs14.iloc[-1]),"atr_pct":sf(atr_pct),"volume_ratio":sf(vol_ratio),"up_down_volume":sf(ud),
+      "distance_52w_high_pct":sf(dist_high*100),"return_20d_pct":sf(ret20*100),"return_63d_pct":sf(ret63*100),"return_126d_pct":sf(ret126*100),
+      "rs_20d_vs_spy_pct":sf(rs20*100),"rs_63d_vs_spy_pct":sf(rs63*100),"rs_126d_vs_spy_pct":sf(rs126*100),
+      "sma20":sf(sma20.iloc[-1]),"sma50":sf(sma50.iloc[-1]),"sma150":sf(sma150.iloc[-1]),"sma200":sf(sma200.iloc[-1]),
+      "high52":sf(hi52),"low52":sf(lo52),"anchor20":sf(p20),"anchor63":sf(p63),"anchor126":sf(p126),
+      "spy_ret20":sf(s20),"spy_ret63":sf(s63),"spy_ret126":sf(s126),"macd_delta_pct":sf(macd_delta_pct),"persistence20":sf(persistence),
+      "obv_slope_pct":sf(ob_slope),"avg_dollar_volume":sf(dollar_vol),"sma200_slope_up":slope_pct(sma200,20)>0,
     }
+
+def pct_rank(s, ascending=True):
+    x=pd.to_numeric(s,errors="coerce")
+    return x.rank(pct=True,method="average",ascending=ascending).fillna(.5)*100
+
+def recalibrate_rows(rows, regime):
+    if not rows:return rows
+    d=pd.DataFrame(rows)
+    p20=pct_rank(d["return_20d_pct"]); p63=pct_rank(d["return_63d_pct"]); p126=pct_rank(d["return_126d_pct"])
+    prs20=pct_rank(d["rs_20d_vs_spy_pct"]); prs63=pct_rank(d["rs_63d_vs_spy_pct"]); prs126=pct_rank(d["rs_126d_vs_spy_pct"])
+    pmacd=pct_rank(d["macd_delta_pct"]); ppersist=pct_rank(d["persistence20"]); phigh=pct_rank(d["distance_52w_high_pct"])
+    pvol=pct_rank(d["volume_ratio"]); pud=pct_rank(d["up_down_volume"]); pobv=pct_rank(d["obv_slope_pct"])
+    pliq=pct_rank(np.log10(pd.to_numeric(d["avg_dollar_volume"],errors="coerce").clip(lower=1)))
+    pvolq=100-pct_rank(d["atr_pct"])
+
+    momentum=.18*p20+.24*p63+.14*p126+.12*prs20+.14*prs63+.06*prs126+.05*pmacd+.04*ppersist+.03*phigh
+    relative=.25*prs20+.45*prs63+.30*prs126
+    institutional=.30*d["trend"]+.18*relative+.14*pvol+.13*pud+.12*pobv+.08*phigh+.05*pliq
+    factor_agreement=100-(pd.concat([momentum,relative,institutional,d["trend"]],axis=1).max(axis=1)-pd.concat([momentum,relative,institutional,d["trend"]],axis=1).min(axis=1))
+    data_quality=.45*pliq+.30*pvolq+.25*factor_agreement.clip(lower=0)
+    confidence=.55*factor_agreement.clip(lower=0)+.25*data_quality+.20*d["trend"]
+    confluence=.30*momentum+.23*institutional+.15*d["trend"]+.17*relative+.15*confidence
+
+    for i,row in enumerate(rows):
+        m=float(momentum.iloc[i]); rel=float(relative.iloc[i]); inst=float(institutional.iloc[i]); conf=float(confidence.iloc[i]); con=float(confluence.iloc[i]); tr=float(row["trend"])
+        bias="BULLISH" if tr>=60 and rel>=55 and m>=60 else "BEARISH" if tr<=40 and rel<=45 and m<=40 else "NEUTRAL"
+        regime_alignment = (regime=="RISK_ON" and bias=="BULLISH") or (regime=="RISK_OFF" and bias=="BEARISH") or bias=="NEUTRAL" or regime in ("MIXED","UNKNOWN")
+        if not regime_alignment:
+            conf=max(0,conf-6); con=max(0,con-3)
+        quality="A+" if con>=86 and conf>=78 else "A" if con>=78 and conf>=72 else "B" if con>=68 and conf>=64 else "C"
+        signal="TOP DECILE MOMENTUM" if m>=90 and con>=80 else "STRONG MOMENTUM" if m>=75 and con>=68 else "WATCH" if con>=55 else "WEAK"
+        reference=float(row["sma20"]) if bias!="NEUTRAL" else float(row["sma50"])
+        evidence=[]
+        if row["price"]>row["sma50"]>row["sma150"]>row["sma200"]:evidence.append("Bullish MA stack")
+        if row["rs_63d_vs_spy_pct"]>5:evidence.append("Strong 3M relative strength")
+        if row["volume_ratio"]>1.4 and row["change_1d_pct"]>0:evidence.append("Volume-backed advance")
+        if row["up_down_volume"]>1.25:evidence.append("Accumulation-biased volume")
+        if row["obv_slope_pct"]>0:evidence.append("OBV rising")
+        if row["rsi14"] and row["rsi14"]>70:evidence.append("RSI extended")
+        if row["atr_pct"] and row["atr_pct"]>5:evidence.append("High volatility risk")
+        if regime_alignment:evidence.append("Aligned with market regime")
+        row.update({
+          "momentum":round(m),"confidence":round(conf),"confluence":round(con),"quality":quality,"bias":bias,"reference_level":sf(reference),
+          "institutional_proxy":round(inst),"relative_strength":round(rel),"composite":round(con),"signal":signal,
+          "factor_agreement":round(float(factor_agreement.iloc[i])),"data_quality":round(float(data_quality.iloc[i])),"market_regime":regime,
+          "evidence":evidence[:8],"private_validation_available":False,
+          "scoring_method":"Cross-sectional percentile ranks across the current liquid universe; avoids hard-score saturation."
+        })
+    return rows
 
 def main():
     universe=discover_universe(); print("Discovered",len(universe),"US-listed non-ETF symbols")
     spy=yf.download(BENCHMARK,period="18mo",interval="1d",auto_adjust=True,progress=False)
     if isinstance(spy.columns,pd.MultiIndex): spy.columns=spy.columns.get_level_values(0)
+    regime=market_regime(spy)
     rows=[]; chunk=160
     for i in range(0,len(universe),chunk):
         batch=universe[i:i+chunk]
@@ -134,20 +165,22 @@ def main():
                 except Exception: pass
         except Exception as e: print("batch",i,"failed:",e)
         time.sleep(.25)
+    rows=recalibrate_rows(rows,regime)
     rows.sort(key=lambda x:(x["confluence"],x["confidence"],x["momentum"]),reverse=True)
     market_dates=[r.get("market_bar_date") for r in rows if r.get("market_bar_date")]
+    configured=[k for k in SECRET_NAMES if os.getenv(k)]
     payload={
-      "generated_at":datetime.now(timezone.utc).isoformat(),
-      "market_data_asof":max(market_dates) if market_dates else None,
-      "market_data_type":"Daily adjusted OHLCV (1-day bars); not live tick data",
-      "market_data_source":"Yahoo Finance via yfinance",
-      "scheduled_refresh":"Weekdays at 21:20 UTC (5:20 PM EDT / 4:20 PM EST), after the US market close",
+      "generated_at":datetime.now(timezone.utc).isoformat(),"market_data_asof":max(market_dates) if market_dates else None,
+      "market_data_type":"Daily adjusted OHLCV (1-day bars) + separate near-live multi-provider quote validation",
+      "market_data_source":"Yahoo Finance via yfinance for historical bars; configured quote APIs validated separately",
+      "configured_quote_providers":len(configured),"market_regime":regime,
+      "scheduled_refresh":"Daily full-universe model after US close; near-live quote snapshots run separately during market hours",
       "benchmark":BENCHMARK,"discovered_count":len(universe),"universe_count":len(rows),
       "liquidity_filter":"Price >= $2 and 20-day average dollar volume >= $5M",
-      "method":"Confluence combines momentum, confidence/data quality, institutional proxy, trend and benchmark-relative strength. It is an evidence score, not a calibrated win probability.",
+      "method":"Cross-sectional percentile model: momentum, relative strength, institutional proxy, trend, factor agreement and data quality. Scores are ranks/evidence, not calibrated win probabilities.",
       "stocks":rows
     }
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(payload,separators=(",",":")))
-    print(f"wrote {len(rows)} liquid analyzed stocks to {OUT}")
+    print(f"wrote {len(rows)} liquid analyzed stocks to {OUT}; regime={regime}")
 
 if __name__=="__main__": main()
