@@ -1,0 +1,7 @@
+{
+  "generated_at": "2026-08-13T11:15:00+00:00",
+  "benchmark": "SPY",
+  "universe_count": 0,
+  "method": "Momentum + trend + benchmark RS + observable institutional proxies; confidence is separate and data-quality aware.",
+  "stocks": []
+}
