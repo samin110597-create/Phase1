@@ -1,0 +1,43 @@
+name: Deep History Calibration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backtest.py'
+      - '.github/workflows/backtest.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase1-backtest
+  cancel-in-progress: true
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PHASE1_BACKTEST_SYMBOLS: '0'
+      PHASE1_BACKTEST_SAMPLE_STEP: '21'
+      PHASE1_BACKTEST_CHUNK: '45'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run maximum-history calibration
+        run: python scripts/backtest.py
+      - name: Commit calibration summary
+        run: |
+          git config user.name "phase1-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/data/backtest.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: refresh deep-history calibration"
+          git pull --rebase
+          git push
