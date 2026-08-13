@@ -1,0 +1,42 @@
+name: Intraday Market Snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 13-21 * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase1-intraday
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate current quote snapshot
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: |
+          if [ -z "$TWELVE_DATA_API_KEY" ]; then
+            echo "TWELVE_DATA_API_KEY is not configured; skipping intraday refresh."
+            exit 0
+          fi
+          python scripts/intraday_snapshot.py
+      - name: Commit snapshot when generated
+        run: |
+          if [ ! -f docs/data/intraday.json ]; then exit 0; fi
+          git config user.name "phase1-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/data/intraday.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: refresh intraday quotes"
+          git pull --rebase
+          git push
