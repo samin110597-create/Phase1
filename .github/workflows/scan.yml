@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: phase1-data-writes
+  cancel-in-progress: false
+
 jobs:
   scan:
     runs-on: ubuntu-latest
