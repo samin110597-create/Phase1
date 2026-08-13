@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 LATEST = Path('docs/data/latest.json')
 OUT = Path('docs/data/intraday.json')
-MAX_SYMBOLS = 40
+MAX_SYMBOLS = int(os.getenv('PHASE1_LIVE_SYMBOLS', '8'))
 
 
 def fetch_quote(symbol: str, key: str):
