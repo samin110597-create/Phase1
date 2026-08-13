@@ -87,7 +87,16 @@ def analyze(symbol,df,spy):
     validation=92 if has_private else 70; vol_quality=clamp(100-max(0,atr_pct-2.2)*12); agreement=100-abs(momentum-institutional)*.55
     confidence=clamp(100*.2+validation*.2+liquidity*.15+vol_quality*.15+agreement*.2+trend*.1)
     composite=clamp(momentum*.33+institutional*.31+trend*.16+relative*.20)
-    label="HIGH CONVICTION" if composite>=80 and confidence>=75 else "STRONG" if composite>=68 and confidence>=65 else "WATCH" if composite>=55 else "WEAK"
+    confluence=clamp(momentum*.24+confidence*.26+institutional*.20+trend*.12+relative*.18)
+    if confluence>=86 and confidence>=78: quality="A+"
+    elif confluence>=78 and confidence>=72: quality="A"
+    elif confluence>=68 and confidence>=64: quality="B"
+    else: quality="C"
+    if trend>=60 and relative>=55 and momentum>=60: bias="BULLISH"
+    elif trend<=40 and relative<=45 and momentum<=40: bias="BEARISH"
+    else: bias="NEUTRAL"
+    reference_level=float(sma20.iloc[-1]) if bias!="NEUTRAL" else float(sma50.iloc[-1])
+    label="ELITE MOMENTUM" if composite>=80 and confidence>=75 else "STRONG MOMENTUM" if composite>=68 and confidence>=65 else "WATCH" if composite>=55 else "WEAK"
     evidence=[]
     if last>sma50.iloc[-1]>sma150.iloc[-1]>sma200.iloc[-1]: evidence.append("Bullish MA stack")
     if rs63>.05:evidence.append("Strong 3M relative strength")
@@ -98,7 +107,8 @@ def analyze(symbol,df,spy):
     if atr_pct>5:evidence.append("High volatility risk")
     if not has_private:evidence.append("No private cross-source validation")
     return {
-      "symbol":symbol,"price":sf(last),"change_1d_pct":sf(c.pct_change().iloc[-1]*100),"momentum":round(momentum),"confidence":round(confidence),
+      "symbol":symbol,"price":sf(last),"market_bar_date":pd.Timestamp(df.index[-1]).date().isoformat(),"change_1d_pct":sf(c.pct_change().iloc[-1]*100),
+      "momentum":round(momentum),"confidence":round(confidence),"confluence":round(confluence),"quality":quality,"bias":bias,"reference_level":sf(reference_level),
       "institutional_proxy":round(institutional),"trend":round(trend),"relative_strength":round(relative),"composite":round(composite),"signal":label,
       "rsi14":sf(rs14.iloc[-1]),"atr_pct":sf(atr_pct),"volume_ratio":sf(vol_ratio),"up_down_volume":sf(ud),"distance_52w_high_pct":sf(dist_high*100),
       "return_20d_pct":sf(ret20*100),"return_63d_pct":sf(ret63*100),"rs_63d_vs_spy_pct":sf(rs63*100),"sma20":sf(sma20.iloc[-1]),"sma50":sf(sma50.iloc[-1]),
@@ -124,8 +134,19 @@ def main():
                 except Exception: pass
         except Exception as e: print("batch",i,"failed:",e)
         time.sleep(.25)
-    rows.sort(key=lambda x:(x["momentum"],x["confidence"],x["composite"]),reverse=True)
-    payload={"generated_at":datetime.now(timezone.utc).isoformat(),"benchmark":BENCHMARK,"discovered_count":len(universe),"universe_count":len(rows),"liquidity_filter":"Price >= $2 and 20-day average dollar volume >= $5M","method":"Momentum + trend + benchmark RS + observable institutional proxies; confidence is separate and data-quality aware.","stocks":rows}
+    rows.sort(key=lambda x:(x["confluence"],x["confidence"],x["momentum"]),reverse=True)
+    market_dates=[r.get("market_bar_date") for r in rows if r.get("market_bar_date")]
+    payload={
+      "generated_at":datetime.now(timezone.utc).isoformat(),
+      "market_data_asof":max(market_dates) if market_dates else None,
+      "market_data_type":"Daily adjusted OHLCV (1-day bars); not live tick data",
+      "market_data_source":"Yahoo Finance via yfinance",
+      "scheduled_refresh":"Weekdays at 21:20 UTC (5:20 PM EDT / 4:20 PM EST), after the US market close",
+      "benchmark":BENCHMARK,"discovered_count":len(universe),"universe_count":len(rows),
+      "liquidity_filter":"Price >= $2 and 20-day average dollar volume >= $5M",
+      "method":"Confluence combines momentum, confidence/data quality, institutional proxy, trend and benchmark-relative strength. It is an evidence score, not a calibrated win probability.",
+      "stocks":rows
+    }
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(payload,separators=(",",":")))
     print(f"wrote {len(rows)} liquid analyzed stocks to {OUT}")
 
