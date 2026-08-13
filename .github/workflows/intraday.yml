@@ -2,8 +2,18 @@ name: Intraday Market Snapshot
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/intraday_snapshot.py'
+      - '.github/workflows/intraday.yml'
   schedule:
-    - cron: '*/5 13-21 * * 1-5'
+    - cron: '30-59/5 9 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '*/5 10-15 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '0 16 * * 1-5'
+      timezone: 'America/New_York'
 
 permissions:
   contents: write
