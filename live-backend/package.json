@@ -1,0 +1,6 @@
+{
+  "name": "phase1-live-backend",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" }
+}
