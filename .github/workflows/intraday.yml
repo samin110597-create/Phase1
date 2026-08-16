@@ -1,11 +1,11 @@
-name: Intraday Market Snapshot
+name: GitHub-Only Live Forecast
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'scripts/intraday_snapshot.py'
+      - 'scripts/github_live_forecast.py'
       - '.github/workflows/intraday.yml'
   schedule:
     - cron: '30-59/5 9 * * 1-5'
@@ -23,30 +23,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  snapshot:
+  live-forecast:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Generate current quote snapshot
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Build GitHub-only near-live forecast snapshot
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
-          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+        run: python scripts/github_live_forecast.py
+      - name: Commit live forecast snapshot
         run: |
-          python scripts/intraday_snapshot.py
-      - name: Commit snapshot when generated
-        run: |
-          if [ ! -f docs/data/intraday.json ]; then exit 0; fi
+          test -f docs/data/live_forecast.json
           git config user.name "phase1-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add docs/data/intraday.json
+          git add docs/data/live_forecast.json
           git diff --cached --quiet && exit 0
-          git commit -m "data: refresh intraday quotes"
+          git commit -m "data: refresh GitHub-only live forecast"
           git pull --rebase
           git push
