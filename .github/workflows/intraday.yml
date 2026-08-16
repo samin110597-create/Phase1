@@ -19,8 +19,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: phase1-data-writes
-  cancel-in-progress: false
+  group: phase1-live-forecast
+  cancel-in-progress: true
 
 jobs:
   live-forecast:
