@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -22,10 +23,11 @@ from sklearn.preprocessing import StandardScaler
 
 OUT_MODEL = Path('forecast/data/live_probability_model.joblib')
 OUT_VALIDATION = Path('docs/data/probability_validation.json')
+CACHE_DIR = Path('forecast/.cache_history')
 TWELVE_KEY = os.getenv('TWELVE_DATA_API_KEY')
 START_DATE = os.getenv('PHASE1_PROB_START', '2021-01-01')
 TIMEOUT = 25
-REQUESTS_PER_MINUTE = 7
+REQUESTS_PER_MINUTE = 6
 ANCHOR_MINUTES = {600, 660, 720, 780, 840, 900, 945}
 PILOT = ['AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','AMD','AVGO','JPM','BAC','MU']
 HORIZONS = [1, 5, 10]
@@ -44,9 +46,20 @@ FEATURES = [
 
 
 def get_json(url: str):
-    req = Request(url, headers={'User-Agent': 'Phase1-Probability-Research/2.0'})
-    with urlopen(req, timeout=TIMEOUT) as r:
-        return json.loads(r.read().decode('utf-8'))
+    req = Request(url, headers={'User-Agent': 'Phase1-Probability-Research/2.1'})
+    last = None
+    for attempt in range(6):
+        try:
+            with urlopen(req, timeout=TIMEOUT) as r:
+                return json.loads(r.read().decode('utf-8'))
+        except HTTPError as e:
+            last = e
+            if e.code != 429:
+                raise
+            delay = 70 + attempt * 10
+            print(f'Twelve Data HTTP 429; cooling down {delay}s before retry {attempt+1}/6')
+            time.sleep(delay)
+    raise last
 
 
 class RateLimiter:
@@ -67,10 +80,35 @@ class RateLimiter:
 LIMITER = RateLimiter()
 
 
+def _cache_path(symbol: str) -> Path:
+    return CACHE_DIR / f'{symbol}_15m_2021.pkl.gz'
+
+
+def _read_cache(symbol: str, target: pd.Timestamp):
+    path = _cache_path(symbol)
+    if not path.exists():
+        return None
+    try:
+        z = pd.read_pickle(path, compression='gzip')
+        z['datetime'] = pd.to_datetime(z['datetime']).astype('datetime64[ns]')
+        recent_enough = z['datetime'].max() >= (pd.Timestamp.now().tz_localize(None) - pd.Timedelta(days=10))
+        deep_enough = z['datetime'].min() <= target + pd.Timedelta(days=7)
+        if recent_enough and deep_enough:
+            print(symbol, 'using cached 15m history', len(z), 'rows')
+            return z
+    except Exception as e:
+        print(symbol, 'cache ignored:', e)
+    return None
+
+
 def fetch_15m(symbol: str) -> pd.DataFrame:
     if not TWELVE_KEY:
         raise RuntimeError('TWELVE_DATA_API_KEY missing')
     target = pd.Timestamp(START_DATE)
+    cached = _read_cache(symbol, target)
+    if cached is not None:
+        return cached.reset_index(drop=True)
+
     end_date = None; pieces = []; seen_oldest = None
     for page in range(12):
         LIMITER.wait()
@@ -80,7 +118,12 @@ def fetch_15m(symbol: str) -> pd.DataFrame:
         d = get_json('https://api.twelvedata.com/time_series?' + urlencode(params))
         vals = d.get('values') if isinstance(d, dict) else None
         if not isinstance(vals, list) or not vals:
-            print(symbol, 'stopped:', d.get('message') if isinstance(d, dict) else 'no data'); break
+            msg = d.get('message') if isinstance(d, dict) else 'no data'
+            if isinstance(msg, str) and ('credit' in msg.lower() or 'limit' in msg.lower()):
+                print(symbol, 'API limit message; cooling down 70s:', msg)
+                time.sleep(70)
+                continue
+            print(symbol, 'stopped:', msg); break
         x = pd.DataFrame(vals)
         x['datetime'] = pd.to_datetime(x['datetime'], errors='coerce').astype('datetime64[ns]')
         for c in ['open','high','low','close','volume']:
@@ -97,7 +140,13 @@ def fetch_15m(symbol: str) -> pd.DataFrame:
     z = pd.concat(pieces, ignore_index=True).drop_duplicates('datetime').sort_values('datetime')
     z = z[z['datetime'] >= target]
     mins = z['datetime'].dt.hour * 60 + z['datetime'].dt.minute
-    return z[(mins >= 570) & (mins <= 945)].reset_index(drop=True)
+    z = z[(mins >= 570) & (mins <= 945)].reset_index(drop=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        z.to_pickle(_cache_path(symbol), compression='gzip')
+    except Exception as e:
+        print(symbol, 'cache write failed:', e)
+    return z
 
 
 def rsi(s: pd.Series, n=14):
