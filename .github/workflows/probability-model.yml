@@ -6,8 +6,6 @@ on:
     branches: [main]
     paths:
       - 'forecast/train_live_probability.py'
-      - 'forecast/live_probability_inference.py'
-      - 'scripts/github_live_forecast_v2.py'
       - 'requirements.txt'
       - '.github/workflows/probability-model.yml'
 
@@ -18,7 +16,7 @@ permissions:
 
 concurrency:
   group: phase1-probability-training
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   train-validate:
@@ -30,8 +28,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: forecast/.cache_history
+          key: phase1-15m-history-v2-${{ runner.os }}
       - run: pip install -r requirements.txt
-      - name: Train and calibrate 1 / 5 / 10-session probability models
+      - name: Train and strictly validate 1 / 5 / 10-session probability models
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           PHASE1_PROB_START: '2021-01-01'
@@ -50,7 +52,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add forecast/data/live_probability_model.joblib docs/data/probability_validation.json docs/data/live_forecast.json
           git diff --cached --quiet && exit 0
-          git commit -m "data: publish calibrated Forecast V1 probabilities"
+          git commit -m "data: publish strict calibrated probabilities"
           git pull --rebase
           git push
 
