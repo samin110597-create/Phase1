@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'forecast/train_live_probability.py'
+      - 'forecast/train_live_probability_raw.py'
       - 'requirements.txt'
       - '.github/workflows/probability-model.yml'
 
@@ -37,7 +38,7 @@ jobs:
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           PHASE1_PROB_START: '2021-01-01'
-        run: python forecast/train_live_probability.py
+        run: python forecast/train_live_probability_raw.py
       - name: Generate live snapshot using newly trained model
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
