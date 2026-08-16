@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/github_live_forecast.py'
+      - 'scripts/github_live_forecast_v2.py'
+      - 'forecast/live_probability_inference.py'
+      - 'forecast/data/live_probability_model.joblib'
       - '.github/workflows/intraday.yml'
   schedule:
     - cron: '30-59/5 9 * * 1-5'
@@ -27,7 +30,7 @@ concurrency:
 jobs:
   live-forecast:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,11 +38,11 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Build GitHub-only near-live forecast snapshot
+      - name: Build GitHub-only live forecast with calibrated probability layer
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python scripts/github_live_forecast.py
+        run: python scripts/github_live_forecast_v2.py
       - name: Commit live forecast snapshot
         run: |
           test -f docs/data/live_forecast.json
@@ -47,7 +50,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add docs/data/live_forecast.json
           git diff --cached --quiet && exit 0
-          git commit -m "data: refresh GitHub-only live forecast"
+          git commit -m "data: refresh calibrated live forecast"
           git pull --rebase
           git push
 
