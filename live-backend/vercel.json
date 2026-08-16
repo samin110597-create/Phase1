@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "functions": {
+    "api/quote.js": { "maxDuration": 15 },
+    "api/forecast.js": { "maxDuration": 30 }
+  }
+}
