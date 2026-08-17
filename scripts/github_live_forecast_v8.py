@@ -18,10 +18,13 @@ OUT=Path('docs/data/live_forecast.json')
 MODEL=Path('forecast/data/intraday_signal_v3.joblib')
 
 
-def meta_v5_ready():
-    if not model_available() or not MODEL.exists(): return False
-    try: return joblib.load(MODEL).get('version')=='intraday-meta-v5'
-    except Exception: return False
+def meta_ready():
+    if not model_available() or not MODEL.exists(): return False, None
+    try:
+        ver=joblib.load(MODEL).get('version')
+        return ver in ('intraday-meta-v5','intraday-meta-v6'), ver
+    except Exception:
+        return False, None
 
 
 def bulk_15m(symbols):
@@ -87,14 +90,14 @@ def direct_target(row,h,hp):
     price=float((row.get('quote') or {}).get('price') or 0); up=float(hp.get('p_up') or 0); dn=float(hp.get('p_down') or 0); side='up' if up>=dn else 'down'; stats=(hp.get('historical_return_targets') or {}).get(side)
     if price>0 and stats and int(stats.get('n',0))>=30:
         med=float(stats['median_return']); q20=float(stats['q20_return']); q80=float(stats['q80_return']); lo=min(q20,q80); hi=max(q20,q80)
-        return {'horizon_sessions':h,'current_price':round(price,4),'forecast_direction':side.upper(),'direction_probability':round(max(up,dn),4),'central_expected_move_pct':round(med*100,3),'central_target_price':round(price*(1+med),2),'projected_range_low':round(max(.01,price*(1+lo)),2),'projected_range_high':round(price*(1+hi),2),'historical_comparable_target_n':int(stats['n']),'method':'median and 20th/80th percentile realized returns from the frozen 2025 comparable-signal set','status':'FROZEN_META_MODEL_TARGET'}
+        return {'horizon_sessions':h,'current_price':round(price,4),'forecast_direction':side.upper(),'direction_probability':round(max(up,dn),4),'central_expected_move_pct':round(med*100,3),'central_target_price':round(price*(1+med),2),'projected_range_low':round(max(.01,price*(1+lo)),2),'projected_range_high':round(price*(1+hi),2),'historical_comparable_target_n':int(stats['n']),'method':'median and 20th/80th percentile realized returns from the frozen independent historical target-calibration block','status':'FROZEN_META_MODEL_TARGET'}
     return prev.build_price_forecast(row,h,hp)
 
 
 def main():
-    prev.main(); payload=json.loads(OUT.read_text())
-    if not meta_v5_ready():
-        payload['meta_v5_layer']={'status':'BUILDING','truth_note':'Current model remains active until the actual intraday-meta-v5 bundle passes activation audit.'}; OUT.write_text(json.dumps(payload,separators=(',',':'))); return
+    prev.main(); payload=json.loads(OUT.read_text()); ready,version=meta_ready()
+    if not ready:
+        payload['meta_v6_layer']={'status':'BUILDING','truth_note':'Current model remains active until a leakage-controlled intraday meta bundle passes activation audit.'}; OUT.write_text(json.dumps(payload,separators=(',',':'))); return
     symbols=base.UNIVERSE; now=datetime.now(base.NY); broad=bulk_15m(symbols+['SPY']); day,week,sector,market=contexts(symbols,now); ranks=cross_section(symbols,broad,day,week,broad.get('SPY',pd.DataFrame())); slot=decision_slot(now)
     spy=broad.get('SPY',pd.DataFrame()); updated=[]
     for row in payload.get('rows',[]):
@@ -116,7 +119,7 @@ def main():
                 gates.append({'horizon_sessions':int(hs),'side':side,'probability':p,'frozen_threshold':th,'mtf_alignment':al,'mtf_opposed':opp,'timeframes':tfs,'comparable_setup_n':(hp.get('comparable_setup_n') or {}).get(side.lower()),'model_dispersion':hp.get('model_dispersion'),'status':'FROZEN_FORWARD_SIGNAL_CANDIDATE' if passed else 'NO_SIGNAL'})
         gates.sort(key=lambda x:(x['status']=='FROZEN_FORWARD_SIGNAL_CANDIDATE',x['probability'],x['mtf_alignment']),reverse=True); row['signal_engine']={'status':gates[0]['status'] if gates else 'NO_SIGNAL','best':gates[0] if gates else None,'all_gates':gates,'policy':'Meta-model threshold + >=60 comparable setups + <=9% model disagreement + 3/4 MTF agreement; final validation remains prospective.'}; updated.append(s)
     valid=[r for r in payload.get('rows',[]) if not r.get('error')]; payload['top_upside']=[r['symbol'] for r in sorted(valid,key=lambda r:((r.get('probability_model',{}).get('horizons',{}).get('5',{}).get('p_up')) or 0),reverse=True)[:3]]; payload['top_downside']=[r['symbol'] for r in sorted(valid,key=lambda r:((r.get('probability_model',{}).get('horizons',{}).get('5',{}).get('p_down')) or 0),reverse=True)[:3]]
-    payload['engine']='Phase1 Selective Intraday Meta Forecast Engine V2.0'; payload['status']='META MODEL ACTIVE — FROZEN FOR FORWARD VALIDATION'; payload['ranking_basis']='Calibrated 3-model ensemble, comparable historical regime buckets, cross-sectional rank and abstention.'; payload['meta_v5_layer']={'status':'ACTIVE','model_version':'intraday-meta-v5','updated_symbols':updated,'broad_intraday_universe':len(broad),'cross_section_features':['candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'],'price_target_method':'historical conditional return distribution when enough comparable signals exist; ATR fallback otherwise'}
+    payload['engine']='Phase1 Selective Intraday Meta Forecast Engine V2.1'; payload['status']='META MODEL ACTIVE — FROZEN FOR FORWARD VALIDATION'; payload['ranking_basis']='Calibrated 3-model ensemble, independent comparable-setup regime calibration, cross-sectional rank and abstention.'; payload['meta_v6_layer']={'status':'ACTIVE','model_version':version,'updated_symbols':updated,'broad_intraday_universe':len(broad),'cross_section_features':['candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'],'price_target_method':'historical conditional return distribution when enough comparable signals exist; ATR fallback otherwise'}
     OUT.write_text(json.dumps(payload,separators=(',',':')))
 
 if __name__=='__main__':main()
