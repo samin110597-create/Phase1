@@ -8,6 +8,7 @@ on:
       - 'forecast/build_intraday_live_like_dataset.py'
       - 'forecast/correct_intraday_labels.py'
       - 'forecast/train_intraday_live_like_model.py'
+      - 'forecast/train_intraday_live_like_model_v2.py'
       - '.github/workflows/intraday-live-like-model.yml'
   schedule:
     - cron: '20 3 * * 0'
@@ -51,7 +52,7 @@ jobs:
         run: python forecast/correct_intraday_labels.py
 
       - name: Train calibrated selective model and freeze for forward validation
-        run: python forecast/train_intraday_live_like_model.py
+        run: python forecast/train_intraday_live_like_model_v2.py
 
       - name: Commit sanitized model evidence
         run: |
