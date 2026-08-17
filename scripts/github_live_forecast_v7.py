@@ -30,25 +30,16 @@ def build_price_forecast(row: dict, horizon: int, hp: dict) -> dict | None:
     if not price or price <= 0 or atr_pct is None or p_up is None or p_down is None:
         return None
 
-    # Daily ATR is already stored as percent of price (e.g. 2.3 = 2.3%).
     atr_frac = max(0.001, atr_pct / 100.0)
     hvol = atr_frac * math.sqrt(max(1, horizon))
-
-    # Probability-weighted central forecast. This is intentionally transparent:
-    # directional probability edge (P(up)-P(down)) × horizon-scaled ATR.
     edge = p_up - p_down
     central_move = edge * hvol
     central_target = price * (1.0 + central_move)
-
-    # One horizon-scaled ATR band around the current price.
     range_low = max(0.01, price * (1.0 - hvol))
     range_high = price * (1.0 + hvol)
-
-    # Meaningful-move threshold used as a practical minimum move reference.
     meaningful_move = max(0.003, 0.35 * max(0.005, atr_frac) * math.sqrt(max(1, horizon)))
     meaningful_up = price * (1.0 + meaningful_move)
     meaningful_down = price * (1.0 - meaningful_move)
-
     direction = 'UP' if p_up > p_down else 'DOWN' if p_down > p_up else 'NEUTRAL'
     direction_probability = max(p_up, p_down)
 
@@ -90,6 +81,15 @@ def main():
                 hp['price_forecast'] = pf
         row['price_forecasts'] = forecasts
 
+    validated = payload.get('accepted_probability_horizons') or []
+    payload['engine'] = 'Phase1 GitHub-Only Quantitative Forecast Engine V1.8'
+    payload['status'] = (
+        'MODEL FORECASTS ACTIVE — VALIDATED HORIZONS: ' + ','.join(str(x) for x in validated)
+        if validated else
+        'MODEL FORECASTS ACTIVE — VALIDATION PENDING'
+    )
+    payload['ranking_basis'] = 'Candidates are ranked by current model probability; numeric targets are probability-weighted volatility forecasts; validation evidence is displayed separately.'
+
     payload['price_target_engine'] = {
         'status': 'ACTIVE',
         'version': 'price-target-v1',
@@ -97,8 +97,6 @@ def main():
         'method': 'probability-weighted directional edge combined with current daily ATR and square-root-of-time horizon scaling',
         'truth_note': 'These are model-implied quantitative targets, not guaranteed future prices. Validation status remains separate from the forecast itself.'
     }
-
-    # User-facing semantics: show the forecast, while retaining the evidence state separately.
     payload['forecast_display_policy'] = {
         'show_model_forecasts_even_when_validation_pending': True,
         'label_unvalidated_output': 'MODEL FORECAST · VALIDATION PENDING',
