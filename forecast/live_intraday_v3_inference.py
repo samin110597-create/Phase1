@@ -12,7 +12,7 @@ SUMMARY = Path('docs/data/intraday_training_summary.json')
 _BUNDLE = None
 
 NON_LIVE_FEATURES = {
-    'candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'
+    'candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank','decision_price_proxy'
 }
 
 
