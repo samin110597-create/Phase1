@@ -2,10 +2,6 @@ name: Intraday Selective Meta Model V5
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'forecast/RUN_META_V5'
 
 permissions:
   contents: write
