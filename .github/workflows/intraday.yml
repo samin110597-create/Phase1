@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/github_live_forecast.py'
       - 'scripts/github_live_forecast_v2.py'
+      - 'scripts/github_live_forecast_v3.py'
       - 'forecast/live_probability_inference.py'
       - 'forecast/update_forward_validation.py'
       - 'forecast/data/live_probability_model.joblib'
@@ -39,11 +40,11 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Build GitHub-only live forecast with probability layer
+      - name: Build resilient GitHub-only live forecast with probability layer
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python scripts/github_live_forecast_v2.py
+        run: python scripts/github_live_forecast_v3.py
       - name: Update prospective forward-validation log
         run: python forecast/update_forward_validation.py
       - name: Commit live forecast and forward evidence
