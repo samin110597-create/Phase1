@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import scripts.github_live_forecast as base
 import scripts.github_live_forecast_v2 as engine
@@ -20,9 +26,8 @@ def resilient_quote(symbol: str):
     raise last_error if last_error else RuntimeError('quote failed')
 
 
-# Patch only the quote acquisition used by the existing engine. This keeps all
-# scoring/backtest logic unchanged while making transient provider failures less
-# likely to remove names from the live universe.
+# Patch only quote acquisition. The model, features, calibration status and
+# backtest rules are unchanged by this resilience layer.
 base.finnhub_quote = resilient_quote
 
 if __name__ == '__main__':
