@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, math, sys
 from datetime import datetime
 from pathlib import Path
-import numpy as np, pandas as pd, yfinance as yf
+import joblib, numpy as np, pandas as pd, yfinance as yf
 
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
@@ -15,6 +15,13 @@ import forecast.build_intraday_live_like_dataset as hist
 from forecast.live_intraday_v3_inference import available as model_available, predict
 
 OUT=Path('docs/data/live_forecast.json')
+MODEL=Path('forecast/data/intraday_signal_v3.joblib')
+
+
+def meta_v5_ready():
+    if not model_available() or not MODEL.exists(): return False
+    try: return joblib.load(MODEL).get('version')=='intraday-meta-v5'
+    except Exception: return False
 
 
 def bulk_15m(symbols):
@@ -36,7 +43,6 @@ def bulk_15m(symbols):
 
 def decision_slot(now):
     m=now.hour*60+now.minute
-    if m<600:return '10:00'
     if m<720:return '10:00'
     if m<840:return '12:00'
     if m<945:return '14:00'
@@ -59,12 +65,11 @@ def contexts(symbols,now):
         if sec and not sd.empty:
             allsc=v4.context_row(hist.daily_features(sd,'sector'),now); sc={k:v for k,v in allsc.items() if k in ('sector_ret5','sector_ret20','sector_ret63','sector_above_ema20','sector_ema20_gt_ema50')}
         sector[s]=sc
-    return daily,day,week,sector,market
+    return day,week,sector,market
 
 
 def cross_section(symbols,bars,day,week,spy):
-    rows=[]
-    spyf=hist.intraday_feature_frame(spy) if spy is not None and not spy.empty else pd.DataFrame(); spy_last=spyf.iloc[-1] if not spyf.empty else None
+    rows=[]; spyf=hist.intraday_feature_frame(spy) if spy is not None and not spy.empty else pd.DataFrame(); spy_last=spyf.iloc[-1] if not spyf.empty else None
     for s in symbols:
         b=bars.get(s,pd.DataFrame())
         if b.empty or s not in day or s not in week:continue
@@ -88,9 +93,9 @@ def direct_target(row,h,hp):
 
 def main():
     prev.main(); payload=json.loads(OUT.read_text())
-    if not model_available():
-        payload['meta_v5_layer']={'status':'BUILDING','truth_note':'Current model remains active until V5 model file passes activation audit.'}; OUT.write_text(json.dumps(payload,separators=(',',':'))); return
-    symbols=base.UNIVERSE; now=datetime.now(base.NY); broad=bulk_15m(symbols+['SPY']); _,day,week,sector,market=contexts(symbols,now); ranks=cross_section(symbols,broad,day,week,broad.get('SPY',pd.DataFrame())); slot=decision_slot(now)
+    if not meta_v5_ready():
+        payload['meta_v5_layer']={'status':'BUILDING','truth_note':'Current model remains active until the actual intraday-meta-v5 bundle passes activation audit.'}; OUT.write_text(json.dumps(payload,separators=(',',':'))); return
+    symbols=base.UNIVERSE; now=datetime.now(base.NY); broad=bulk_15m(symbols+['SPY']); day,week,sector,market=contexts(symbols,now); ranks=cross_section(symbols,broad,day,week,broad.get('SPY',pd.DataFrame())); slot=decision_slot(now)
     spy=broad.get('SPY',pd.DataFrame()); updated=[]
     for row in payload.get('rows',[]):
         s=row.get('symbol'); b=broad.get(s,pd.DataFrame())
@@ -101,8 +106,7 @@ def main():
         for hs,hp in (probs.get('horizons') or {}).items():
             h=int(hs); pf=direct_target(row,h,hp)
             if pf: forecasts[hs]=pf; hp['price_forecast']=pf
-        row['price_forecasts']=forecasts
-        gates=[]
+        row['price_forecasts']=forecasts; gates=[]
         for hs in ('1','5','10'):
             hp=(probs.get('horizons') or {}).get(hs,{})
             for side in ('UP','DOWN'):
@@ -112,7 +116,7 @@ def main():
                 gates.append({'horizon_sessions':int(hs),'side':side,'probability':p,'frozen_threshold':th,'mtf_alignment':al,'mtf_opposed':opp,'timeframes':tfs,'comparable_setup_n':(hp.get('comparable_setup_n') or {}).get(side.lower()),'model_dispersion':hp.get('model_dispersion'),'status':'FROZEN_FORWARD_SIGNAL_CANDIDATE' if passed else 'NO_SIGNAL'})
         gates.sort(key=lambda x:(x['status']=='FROZEN_FORWARD_SIGNAL_CANDIDATE',x['probability'],x['mtf_alignment']),reverse=True); row['signal_engine']={'status':gates[0]['status'] if gates else 'NO_SIGNAL','best':gates[0] if gates else None,'all_gates':gates,'policy':'Meta-model threshold + >=60 comparable setups + <=9% model disagreement + 3/4 MTF agreement; final validation remains prospective.'}; updated.append(s)
     valid=[r for r in payload.get('rows',[]) if not r.get('error')]; payload['top_upside']=[r['symbol'] for r in sorted(valid,key=lambda r:((r.get('probability_model',{}).get('horizons',{}).get('5',{}).get('p_up')) or 0),reverse=True)[:3]]; payload['top_downside']=[r['symbol'] for r in sorted(valid,key=lambda r:((r.get('probability_model',{}).get('horizons',{}).get('5',{}).get('p_down')) or 0),reverse=True)[:3]]
-    payload['engine']='Phase1 Selective Intraday Meta Forecast Engine V2.0'; payload['status']='META MODEL ACTIVE — FROZEN FOR FORWARD VALIDATION'; payload['ranking_basis']='Calibrated 3-model ensemble, comparable historical regime buckets, cross-sectional rank and abstention.'; payload['meta_v5_layer']={'status':'ACTIVE','updated_symbols':updated,'broad_intraday_universe':len(broad),'cross_section_features':['candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'],'price_target_method':'historical conditional return distribution when enough comparable signals exist; ATR fallback otherwise'}
+    payload['engine']='Phase1 Selective Intraday Meta Forecast Engine V2.0'; payload['status']='META MODEL ACTIVE — FROZEN FOR FORWARD VALIDATION'; payload['ranking_basis']='Calibrated 3-model ensemble, comparable historical regime buckets, cross-sectional rank and abstention.'; payload['meta_v5_layer']={'status':'ACTIVE','model_version':'intraday-meta-v5','updated_symbols':updated,'broad_intraday_universe':len(broad),'cross_section_features':['candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'],'price_target_method':'historical conditional return distribution when enough comparable signals exist; ATR fallback otherwise'}
     OUT.write_text(json.dumps(payload,separators=(',',':')))
 
 if __name__=='__main__':main()
