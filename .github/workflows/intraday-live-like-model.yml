@@ -8,6 +8,7 @@ on:
       - 'forecast/build_intraday_live_like_dataset.py'
       - 'forecast/build_intraday_live_like_dataset_v3.py'
       - 'forecast/correct_intraday_labels.py'
+      - 'forecast/audit_intraday_dataset.py'
       - 'forecast/train_intraday_live_like_model.py'
       - 'forecast/train_intraday_live_like_model_v2.py'
       - '.github/workflows/intraday-live-like-model.yml'
@@ -52,6 +53,9 @@ jobs:
       - name: Align stock and SPY labels to the exact same intraday snapshot
         run: python forecast/correct_intraday_labels.py
 
+      - name: Audit dataset integrity and label consistency
+        run: python forecast/audit_intraday_dataset.py
+
       - name: Train calibrated selective model and freeze for forward validation
         run: python forecast/train_intraday_live_like_model_v2.py
 
@@ -59,7 +63,7 @@ jobs:
         run: |
           git config user.name "phase1-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add docs/data/intraday_training_summary.json docs/data/intraday_model_v3_validation.json forecast/data/intraday_signal_v3.joblib
+          git add docs/data/intraday_training_summary.json docs/data/intraday_dataset_audit.json docs/data/intraday_model_v3_validation.json forecast/data/intraday_signal_v3.joblib
           if [ -f forecast/data/intraday_live_like_v2.csv.gz ]; then
             SIZE=$(stat -c%s forecast/data/intraday_live_like_v2.csv.gz)
             if [ "$SIZE" -lt 90000000 ]; then
