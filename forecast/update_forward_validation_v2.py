@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+
+ROOT=Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
 
 import forecast.update_forward_validation as old
 
@@ -54,7 +59,7 @@ def score_entries(entries):
     closes=old.daily_close_history(symbols); spy=closes.get('SPY',pd.Series(dtype=float))
     today=pd.Timestamp(datetime.now(NY).date()); spy_completed=spy[spy.index<today]
     for rec in entries:
-        s=rec.get('symbol'); series=closes.get(s,pd.Series(dtype=float));
+        s=rec.get('symbol'); series=closes.get(s,pd.Series(dtype=float))
         if series.empty: continue
         d0=pd.Timestamp(rec['date']); completed=series[series.index<today]; future_dates=completed.index[completed.index>d0]
         v3=str(rec.get('model_version') or '').startswith('intraday-signal-v3')
@@ -87,7 +92,7 @@ def wilson_lower(successes,n,z=1.96):
 
 
 def side_metrics(rows, side):
-    pk='p_up' if side=='up' else 'p_down'; yk='realized_up' if side=='up' else 'realized_down'; bk='brier_up' if side=='up' else 'brier_down'
+    pk='p_up' if side=='up' else 'p_down'; yk='realized_up' if side=='up' else 'realized_down'
     z=[r for r in rows if r.get(pk) is not None and r.get(yk) is not None]
     if not z: return {'n':0,'status':'COLLECTING'}
     p=np.array([float(r[pk]) for r in z]); y=np.array([int(r[yk]) for r in z]); base=float(y.mean()); bp=np.full(len(y),base)
