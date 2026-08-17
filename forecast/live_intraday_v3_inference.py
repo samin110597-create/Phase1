@@ -9,6 +9,7 @@ import pandas as pd
 
 MODEL = Path('forecast/data/intraday_signal_v3.joblib')
 SUMMARY = Path('docs/data/intraday_training_summary.json')
+AUDIT = Path('docs/data/intraday_dataset_audit.json')
 _BUNDLE = None
 
 NON_LIVE_FEATURES = {
@@ -17,10 +18,13 @@ NON_LIVE_FEATURES = {
 
 
 def _activation_check():
-    if not MODEL.exists() or not SUMMARY.exists():
-        return False, 'model or training summary missing'
+    if not MODEL.exists() or not SUMMARY.exists() or not AUDIT.exists():
+        return False, 'model, training summary, or dataset audit missing'
     try:
         summary=json.loads(SUMMARY.read_text())
+        audit=json.loads(AUDIT.read_text())
+        if audit.get('status') != 'PASS':
+            return False, 'dataset integrity audit did not pass'
         if not summary.get('benchmark_label_alignment','').startswith('CORRECTED:'):
             return False, 'same-snapshot SPY label correction not recorded'
         bundle=joblib.load(MODEL)
