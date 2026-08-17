@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
@@ -7,16 +8,49 @@ import numpy as np
 import pandas as pd
 
 MODEL = Path('forecast/data/intraday_signal_v3.joblib')
+SUMMARY = Path('docs/data/intraday_training_summary.json')
 _BUNDLE = None
+
+NON_LIVE_FEATURES = {
+    'candidate_score','candidate_rank_pct','activity_rank_pct','rvol_rank_pct','cross_section_rel_rank'
+}
+
+
+def _activation_check():
+    if not MODEL.exists() or not SUMMARY.exists():
+        return False, 'model or training summary missing'
+    try:
+        summary=json.loads(SUMMARY.read_text())
+        if not summary.get('benchmark_label_alignment','').startswith('CORRECTED:'):
+            return False, 'same-snapshot SPY label correction not recorded'
+        bundle=joblib.load(MODEL)
+        cols=set(bundle.get('feature_columns',[]))
+        bad=sorted(cols & NON_LIVE_FEATURES)
+        if bad:
+            return False, 'non-live-reproducible model features present: ' + ','.join(bad)
+        if bundle.get('status') != 'FROZEN_FOR_PROSPECTIVE_VALIDATION':
+            return False, 'model is not frozen for prospective validation'
+        return True, 'activation checks passed'
+    except Exception as e:
+        return False, f'activation check failed: {type(e).__name__}'
 
 
 def available():
-    return MODEL.exists()
+    ok,_=_activation_check()
+    return ok
+
+
+def activation_status():
+    ok,reason=_activation_check()
+    return {'ready':ok,'reason':reason}
 
 
 def _bundle():
     global _BUNDLE
     if _BUNDLE is None:
+        ok,reason=_activation_check()
+        if not ok:
+            raise RuntimeError('V3 activation blocked: '+reason)
         _BUNDLE = joblib.load(MODEL)
     return _BUNDLE
 
@@ -28,8 +62,9 @@ def _calibrated(cal, raw_p):
 
 
 def predict(feature_values: dict):
-    if not MODEL.exists():
-        return {'status':'MODEL_V3_BUILDING','horizons':{},'validated_horizons':[],'model_version':'intraday-signal-v3'}
+    ok,reason=_activation_check()
+    if not ok:
+        return {'status':'MODEL_V3_BUILDING_OR_BLOCKED','activation_reason':reason,'horizons':{},'validated_horizons':[],'model_version':'intraday-signal-v3'}
     b=_bundle(); cols=b['feature_columns']; x=pd.DataFrame([{c:feature_values.get(c,np.nan) for c in cols}])
     out={}
     for h,sides in b.get('models',{}).items():
@@ -46,8 +81,6 @@ def predict(feature_values: dict):
             row['p_neutral']=round(1-pu-pdn,4)
         else:
             row['p_neutral']=None
-        # V3 is frozen for prospective validation. Threshold crossing is a research signal candidate,
-        # not historical proof of a validated trading signal.
         row['accepted_for_display']=False
         row['display_side']=None
         out[str(h)]=row
