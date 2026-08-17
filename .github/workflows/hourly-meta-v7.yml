@@ -2,6 +2,12 @@ name: Bulk-Hourly Selective Meta Model V7
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hourly-meta-v7.yml'
+      - 'forecast/train_hourly_meta_model_v7.py'
+      - 'forecast/RUN_HOURLY_META_V7'
 
 permissions:
   contents: write
