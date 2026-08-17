@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'forecast/build_intraday_live_like_dataset.py'
+      - 'forecast/correct_intraday_labels.py'
       - 'forecast/train_intraday_live_like_model.py'
       - '.github/workflows/intraday-live-like-model.yml'
   schedule:
@@ -45,6 +46,9 @@ jobs:
           PHASE1_INTRADAY_SYMBOLS: '40'
           PHASE1_TWELVE_RPM: '7'
         run: python forecast/build_intraday_live_like_dataset.py
+
+      - name: Align stock and SPY labels to the exact same intraday snapshot
+        run: python forecast/correct_intraday_labels.py
 
       - name: Train calibrated selective model and freeze for forward validation
         run: python forecast/train_intraday_live_like_model.py
