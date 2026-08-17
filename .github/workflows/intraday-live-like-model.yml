@@ -2,18 +2,6 @@ name: Intraday Live-Like Probability Model V4
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'forecast/build_intraday_live_like_dataset.py'
-      - 'forecast/build_intraday_live_like_dataset_v3.py'
-      - 'forecast/build_intraday_from_cache_v4.py'
-      - 'forecast/collect_intraday_cache_batch.py'
-      - 'forecast/correct_intraday_labels.py'
-      - 'forecast/audit_intraday_dataset.py'
-      - 'forecast/train_intraday_live_like_model.py'
-      - 'forecast/train_intraday_live_like_model_v2.py'
-      - '.github/workflows/intraday-live-like-model.yml'
   schedule:
     - cron: '20 3 * * 0'
 
