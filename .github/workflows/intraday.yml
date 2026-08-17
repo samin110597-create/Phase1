@@ -43,6 +43,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -53,7 +55,7 @@ jobs:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python scripts/github_live_forecast_v7.py
-      - name: Update matched prospective forward-validation log
+      - name: Recover stored fixed-time forecasts and update forward validation
         run: python forecast/update_forward_validation_v2.py
       - name: Commit live forecast and forward evidence
         run: |
