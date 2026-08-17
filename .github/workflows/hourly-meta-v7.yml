@@ -2,10 +2,6 @@ name: Bulk-Hourly Selective Meta Model V7
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'forecast/RUN_HOURLY_META_V7'
 
 permissions:
   contents: write
