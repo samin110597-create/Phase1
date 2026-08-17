@@ -25,6 +25,11 @@ def available():return _activation_check()[0]
 def activation_status():
     ok,reason=_activation_check(); return {'ready':ok,'reason':reason}
 
+def bundle_version():
+    try:
+        return joblib.load(MODEL).get('version') if MODEL.exists() else None
+    except Exception:return None
+
 def _bundle():
     global _BUNDLE
     if _BUNDLE is None:
@@ -62,7 +67,7 @@ def _meta_predict(b,feature_values):
         thresholds=item.get('thresholds',{}); rs=item.get('return_stats',{})
         row={'p_down':round(float(adj[0]),4),'p_neutral':round(float(adj[1]),4),'p_up':round(float(adj[2]),4),'model_dispersion':round(disp,4),'comparable_setup_n':{'down':local[0],'neutral':local[1],'up':local[2]},'up_threshold':thresholds.get('up'),'down_threshold':thresholds.get('down'),'up_threshold_passed':bool(thresholds.get('up') is not None and adj[2]>=float(thresholds['up']) and local[2]>=min_n and disp<=max_disp),'down_threshold_passed':bool(thresholds.get('down') is not None and adj[0]>=float(thresholds['down']) and local[0]>=min_n and disp<=max_disp),'historical_return_targets':rs,'accepted_for_display':False,'display_side':None}
         out[str(h)]=row
-    return {'status':'FROZEN_META_MODEL_AWAITING_FORWARD_VALIDATION','horizons':out,'validated_horizons':[],'model_version':b.get('version','intraday-meta-v6'),'trained_at':b.get('trained_at'),'feature_count':len(cols),'truth_note':'Probability blends a calibrated model ensemble with observed rates from comparable historical regime/probability buckets. Final validation remains prospective.'}
+    return {'status':'FROZEN_META_MODEL_AWAITING_FORWARD_VALIDATION','horizons':out,'validated_horizons':[],'model_version':b.get('version'),'trained_at':b.get('trained_at'),'feature_count':len(cols),'truth_note':'Probability blends a calibrated ensemble with observed rates from comparable historical regime/probability buckets. Final validation remains prospective.'}
 
 def _legacy_predict(b,feature_values):
     cols=b['feature_columns']; x=pd.DataFrame([{c:feature_values.get(c,np.nan) for c in cols}]); out={}
@@ -76,4 +81,4 @@ def _legacy_predict(b,feature_values):
 def predict(feature_values:dict):
     ok,reason=_activation_check()
     if not ok:return {'status':'MODEL_BUILDING_OR_BLOCKED','activation_reason':reason,'horizons':{},'validated_horizons':[],'model_version':'pending'}
-    b=_bundle(); return _meta_predict(b,feature_values) if b.get('version') in ('intraday-meta-v5','intraday-meta-v6') else _legacy_predict(b,feature_values)
+    b=_bundle(); return _meta_predict(b,feature_values) if b.get('version') in ('intraday-meta-v5','intraday-meta-v6','hourly-meta-v7') else _legacy_predict(b,feature_values)
