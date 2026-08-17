@@ -1,4 +1,4 @@
-name: Intraday Live-Like Probability Model V3
+name: Intraday Live-Like Probability Model V4
 
 on:
   workflow_dispatch:
@@ -7,6 +7,8 @@ on:
     paths:
       - 'forecast/build_intraday_live_like_dataset.py'
       - 'forecast/build_intraday_live_like_dataset_v3.py'
+      - 'forecast/build_intraday_from_cache_v4.py'
+      - 'forecast/collect_intraday_cache_batch.py'
       - 'forecast/correct_intraday_labels.py'
       - 'forecast/audit_intraday_dataset.py'
       - 'forecast/train_intraday_live_like_model.py'
@@ -19,11 +21,62 @@ permissions:
   contents: write
 
 concurrency:
-  group: phase1-intraday-history-v3
+  group: phase1-intraday-history-v4
   cancel-in-progress: false
 
 jobs:
+  collect-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - batch: b0
+            symbols: 'AAPL,MSFT,NVDA,AMZN,META,GOOGL,GOOG,TSLA,SPY'
+          - batch: b1
+            symbols: 'AMD,AVGO,NFLX,JPM,BAC,XOM,CVX,WMT'
+          - batch: b2
+            symbols: 'COST,HD,UNH,LLY,ORCL,CRM,PLTR,MU'
+          - batch: b3
+            symbols: 'INTC,QCOM,AMAT,TSM,UBER,V,MA,GS'
+          - batch: b4
+            symbols: 'MS,CAT,GE,DIS,KO,PEP,CSCO,ADBE'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Restore this batch's historical 15m cache
+        uses: actions/cache@v4
+        with:
+          path: forecast/cache/intraday15
+          key: phase1-intraday15-v4-${{ matrix.batch }}-${{ github.run_id }}
+          restore-keys: |
+            phase1-intraday15-v4-${{ matrix.batch }}-
+
+      - name: Collect multi-year 15m history in a rate-safe batch
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          PHASE1_INTRADAY_START: '2020-01-01'
+          PHASE1_TWELVE_RPM: '1'
+          PHASE1_BATCH_SYMBOLS: ${{ matrix.symbols }}
+        run: python forecast/collect_intraday_cache_batch.py
+
+      - name: Upload batch cache for the training job
+        uses: actions/upload-artifact@v4
+        with:
+          name: intraday-cache-${{ matrix.batch }}
+          path: forecast/cache/intraday15/*.csv.gz
+          if-no-files-found: error
+          retention-days: 7
+
   build-train-freeze:
+    needs: collect-history
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -34,21 +87,31 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore historical 15m cache
-        uses: actions/cache@v4
+      - name: Merge all historical cache batches
+        uses: actions/download-artifact@v4
         with:
+          pattern: intraday-cache-*
           path: forecast/cache/intraday15
-          key: phase1-intraday15-v2-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            phase1-intraday15-v2-${{ runner.os }}-
+          merge-multiple: true
+
+      - name: Verify complete 40-stock plus SPY cache
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          expected = set('AAPL MSFT NVDA AMZN META GOOGL GOOG TSLA AMD AVGO NFLX JPM BAC XOM CVX WMT COST HD UNH LLY ORCL CRM PLTR MU INTC QCOM AMAT TSM UBER V MA GS MS CAT GE DIS KO PEP CSCO ADBE SPY'.split())
+          root = Path('forecast/cache/intraday15')
+          found = {p.stem.replace('.csv','') for p in root.glob('*.csv.gz')}
+          missing = sorted(expected - found)
+          print('cache files:', len(found), 'missing:', missing)
+          if missing:
+              raise SystemExit('missing required history: ' + ','.join(missing))
+          PY
 
       - name: Build historical snapshots that mirror the live engine
         env:
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           PHASE1_INTRADAY_START: '2020-01-01'
           PHASE1_INTRADAY_SYMBOLS: '40'
-          PHASE1_TWELVE_RPM: '7'
-        run: python forecast/build_intraday_live_like_dataset_v3.py
+        run: python forecast/build_intraday_from_cache_v4.py
 
       - name: Align stock and SPY labels to the exact same intraday snapshot
         run: python forecast/correct_intraday_labels.py
@@ -69,10 +132,10 @@ jobs:
             if [ "$SIZE" -lt 90000000 ]; then
               git add forecast/data/intraday_live_like_v2.csv.gz
             else
-              echo "Derived dataset is $SIZE bytes; keeping it in the Actions workspace/cache rather than pushing a >90MB repo file."
+              echo "Derived dataset is $SIZE bytes; keeping it in the Actions workspace rather than pushing a >90MB repo file."
             fi
           fi
           git diff --cached --quiet && exit 0
-          git commit -m "data: freeze live-like intraday probability model v3"
+          git commit -m "data: freeze live-like intraday probability model v4"
           git pull --rebase
           git push
