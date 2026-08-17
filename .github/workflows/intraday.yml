@@ -10,6 +10,7 @@ on:
       - 'scripts/github_live_forecast_v3.py'
       - 'scripts/github_live_forecast_v4.py'
       - 'scripts/github_live_forecast_v5.py'
+      - 'scripts/github_live_forecast_v6.py'
       - 'forecast/live_probability_inference.py'
       - 'forecast/live_intraday_v3_inference.py'
       - 'forecast/update_forward_validation.py'
@@ -50,7 +51,7 @@ jobs:
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python scripts/github_live_forecast_v5.py
+        run: python scripts/github_live_forecast_v6.py
       - name: Update matched prospective forward-validation log
         run: python forecast/update_forward_validation_v2.py
       - name: Commit live forecast and forward evidence
