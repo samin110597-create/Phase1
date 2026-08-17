@@ -95,13 +95,16 @@ def daily_close_history(symbols: list[str]):
 def score_entries(entries: list[dict]):
     symbols = sorted({x.get('symbol') for x in entries if x.get('symbol')})
     closes = daily_close_history(symbols)
+    today_ny = pd.Timestamp(datetime.now(NY).date())
     for rec in entries:
         s = rec.get('symbol')
         series = closes.get(s, pd.Series(dtype=float))
         if series.empty:
             continue
         d0 = pd.Timestamp(rec['date'])
-        future_dates = series.index[series.index > d0]
+        # Only completed sessions are eligible. Today's partial daily bar is never used.
+        completed = series[series.index < today_ny]
+        future_dates = completed.index[completed.index > d0]
         for h in HORIZONS:
             obj = rec.get('horizons', {}).get(str(h), {})
             if obj.get('outcome_known'):
@@ -109,10 +112,7 @@ def score_entries(entries: list[dict]):
             if len(future_dates) < h:
                 continue
             fdt = future_dates[h - 1]
-            # Only score a session once its daily bar exists.
-            if fdt > series.index.max():
-                continue
-            future_close = float(series.loc[fdt])
+            future_close = float(completed.loc[fdt])
             p_up = obj.get('p_up')
             if p_up is None:
                 continue
@@ -139,7 +139,7 @@ def summarize(entries: list[dict]):
     result = {
         'generated_at': datetime.now().astimezone().isoformat(),
         'status': 'COLLECTING_FORWARD_EVIDENCE',
-        'definition': 'Predictions are logged prospectively at fixed intraday slots; outcome is whether the future session close is above the logged snapshot price.',
+        'definition': 'Predictions are logged prospectively at fixed intraday slots; outcome is whether a completed future session close is above the logged snapshot price.',
         'slots_et': [f'{h:02d}:{m:02d}' for h, m in SLOTS],
         'total_logged_snapshots': len(entries),
         'horizons': {},
