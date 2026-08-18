@@ -5,6 +5,8 @@ from forecast.live_intraday_v3_inference import available, bundle_version
 
 
 def evidence_ready() -> bool:
+    # Production activation is allowed only when the frozen hourly bundle
+    # passes the independent evidence gate in live_intraday_v3_inference.
     return bool(available() and bundle_version() == 'hourly-meta-v7')
 
 
