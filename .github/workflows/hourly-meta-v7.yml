@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python forecast/train_hourly_meta_model_v7.py > /tmp/v7_train.log 2>&1
+          python -m forecast.train_hourly_meta_model_v7 > /tmp/v7_train.log 2>&1
           code=$?
           tail -c 12000 /tmp/v7_train.log > /tmp/v7_tail.log || true
           TRAIN_EXIT=$code python - <<'PY'
