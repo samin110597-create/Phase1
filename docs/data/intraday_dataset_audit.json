@@ -1,0 +1,1 @@
+{"generated_at":"2026-08-18T01:31:35.924197+00:00","status":"PASS","dataset":"bulk Yahoo Finance 60m history","rows":116596,"candidate_pool_rows":59728,"symbols":40,"duplicate_snapshot_symbol_rows":0,"future_columns_excluded_from_model":true,"chronological_splits":true}
