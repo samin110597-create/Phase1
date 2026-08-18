@@ -2,12 +2,6 @@ name: Rank Consensus Forecast Model V9
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/rank-consensus-v9.yml'
-      - 'forecast/train_rank_consensus_v9.py'
-      - 'forecast/RUN_RANK_CONSENSUS_V9'
 
 permissions:
   contents: write
@@ -42,13 +36,7 @@ jobs:
           from pathlib import Path
           log=Path('/tmp/v9_tail.log').read_text(errors='replace') if Path('/tmp/v9_tail.log').exists() else ''
           code=int(os.environ.get('TRAIN_EXIT','999'))
-          Path('docs/data/rank_consensus_v9_build_status.json').write_text(json.dumps({
-              'generated_at':datetime.now(timezone.utc).isoformat(),
-              'status':'SUCCESS' if code==0 else 'FAILED',
-              'exit_code':code,
-              'stage_model_exists':Path('forecast/data/rank_consensus_v9.joblib').exists(),
-              'validation_exists':Path('docs/data/rank_consensus_v9_validation.json').exists(),
-              'log_tail':log[-18000:]},separators=(',',':')))
+          Path('docs/data/rank_consensus_v9_build_status.json').write_text(json.dumps({'generated_at':datetime.now(timezone.utc).isoformat(),'status':'SUCCESS' if code==0 else 'FAILED','exit_code':code,'stage_model_exists':Path('forecast/data/rank_consensus_v9.joblib').exists(),'validation_exists':Path('docs/data/rank_consensus_v9_validation.json').exists(),'log_tail':log[-18000:]},separators=(',',':')))
           PY
           exit 0
       - name: Commit V9 staging evidence
