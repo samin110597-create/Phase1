@@ -4,9 +4,28 @@ import json, math
 from pathlib import Path
 import joblib, numpy as np, pandas as pd
 
-MODEL=Path('forecast/data/intraday_signal_v3.joblib'); SUMMARY=Path('docs/data/intraday_training_summary.json'); AUDIT=Path('docs/data/intraday_dataset_audit.json')
+MODEL=Path('forecast/data/intraday_signal_v3.joblib'); SUMMARY=Path('docs/data/intraday_training_summary.json'); AUDIT=Path('docs/data/intraday_dataset_audit.json'); VALIDATION=Path('docs/data/intraday_model_v3_validation.json')
 _BUNDLE=None
 NON_LIVE_FEATURES={'decision_price_proxy'}
+
+
+def _evidence_gate(version):
+    if not VALIDATION.exists(): return False,'validation evidence missing'
+    try:
+        v=json.loads(VALIDATION.read_text()); results=v.get('results',{})
+        if version=='hourly-meta-v7':
+            qualified=False; quality=False
+            for h,item in results.items():
+                q=item.get('selection_probability_quality',{})
+                if q.get('brier') is not None and q.get('base_brier') is not None and q['brier']<q['base_brier'] and q.get('log_loss',1e9)<q.get('base_log_loss',-1e9): quality=True
+                rules=item.get('selection_signal_rules',{})
+                for side in ('up','down'):
+                    r=rules.get(side)
+                    if r and r.get('accepted_2025'): qualified=True
+            if not quality:return False,'model did not beat baseline probability quality'
+            if not qualified:return False,'no selective signal threshold qualified'
+        return True,'validation evidence gate passed'
+    except Exception as e:return False,f'validation evidence unreadable: {type(e).__name__}: {str(e)[:100]}'
 
 
 def _activation_check():
@@ -18,6 +37,8 @@ def _activation_check():
         b=joblib.load(MODEL); bad=sorted(set(b.get('feature_columns',[]))&NON_LIVE_FEATURES)
         if bad:return False,'non-live-reproducible model features present: '+','.join(bad)
         if b.get('status')!='FROZEN_FOR_PROSPECTIVE_VALIDATION':return False,'model is not frozen for prospective validation'
+        ok,reason=_evidence_gate(b.get('version'))
+        if not ok:return False,reason
         return True,'activation checks passed'
     except Exception as e:return False,f'activation check failed: {type(e).__name__}: {str(e)[:100]}'
 
@@ -26,8 +47,7 @@ def activation_status():
     ok,reason=_activation_check(); return {'ready':ok,'reason':reason}
 
 def bundle_version():
-    try:
-        return joblib.load(MODEL).get('version') if MODEL.exists() else None
+    try:return joblib.load(MODEL).get('version') if MODEL.exists() else None
     except Exception:return None
 
 def _bundle():
