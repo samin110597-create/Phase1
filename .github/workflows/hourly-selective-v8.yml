@@ -2,13 +2,6 @@ name: Hourly Selective Side Model V8
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/hourly-selective-v8.yml'
-      - 'forecast/train_hourly_selective_v8.py'
-      - 'forecast/run_hourly_selective_v8.py'
-      - 'forecast/RUN_HOURLY_SELECTIVE_V8'
 
 permissions:
   contents: write
@@ -43,15 +36,7 @@ jobs:
           from pathlib import Path
           log=Path('/tmp/v8_tail.log').read_text(errors='replace') if Path('/tmp/v8_tail.log').exists() else ''
           code=int(os.environ.get('TRAIN_EXIT','999'))
-          p={
-            'generated_at':datetime.now(timezone.utc).isoformat(),
-            'status':'SUCCESS' if code==0 else 'FAILED',
-            'exit_code':code,
-            'stage_model_exists':Path('forecast/data/hourly_selective_v8.joblib').exists(),
-            'validation_exists':Path('docs/data/hourly_selective_v8_validation.json').exists(),
-            'status_file_exists':Path('docs/data/hourly_selective_v8_status.json').exists(),
-            'log_tail':log[-15000:]}
-          Path('docs/data/hourly_selective_v8_build_status.json').write_text(json.dumps(p,separators=(',',':')))
+          Path('docs/data/hourly_selective_v8_build_status.json').write_text(json.dumps({'generated_at':datetime.now(timezone.utc).isoformat(),'status':'SUCCESS' if code==0 else 'FAILED','exit_code':code,'stage_model_exists':Path('forecast/data/hourly_selective_v8.joblib').exists(),'validation_exists':Path('docs/data/hourly_selective_v8_validation.json').exists(),'status_file_exists':Path('docs/data/hourly_selective_v8_status.json').exists(),'log_tail':log[-15000:]},separators=(',',':')))
           PY
           exit 0
       - name: Commit V8 staging evidence
