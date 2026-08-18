@@ -1,0 +1,65 @@
+name: Rank Consensus Forecast Model V9
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rank-consensus-v9.yml'
+      - 'forecast/train_rank_consensus_v9.py'
+      - 'forecast/RUN_RANK_CONSENSUS_V9'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase1-rank-consensus-v9
+  cancel-in-progress: true
+
+jobs:
+  train-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Train V9 rank-consensus staging model
+        shell: bash
+        run: |
+          set +e
+          python -m forecast.train_rank_consensus_v9 > /tmp/v9.log 2>&1
+          code=$?
+          tail -c 18000 /tmp/v9.log > /tmp/v9_tail.log || true
+          TRAIN_EXIT=$code python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          log=Path('/tmp/v9_tail.log').read_text(errors='replace') if Path('/tmp/v9_tail.log').exists() else ''
+          code=int(os.environ.get('TRAIN_EXIT','999'))
+          Path('docs/data/rank_consensus_v9_build_status.json').write_text(json.dumps({
+              'generated_at':datetime.now(timezone.utc).isoformat(),
+              'status':'SUCCESS' if code==0 else 'FAILED',
+              'exit_code':code,
+              'stage_model_exists':Path('forecast/data/rank_consensus_v9.joblib').exists(),
+              'validation_exists':Path('docs/data/rank_consensus_v9_validation.json').exists(),
+              'log_tail':log[-18000:]},separators=(',',':')))
+          PY
+          exit 0
+      - name: Commit V9 staging evidence
+        run: |
+          git config user.name "phase1-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/data/rank_consensus_v9_build_status.json
+          test ! -f forecast/data/rank_consensus_v9.joblib || git add forecast/data/rank_consensus_v9.joblib
+          test ! -f docs/data/rank_consensus_v9_validation.json || git add docs/data/rank_consensus_v9_validation.json
+          test ! -f docs/data/rank_consensus_v9_status.json || git add docs/data/rank_consensus_v9_status.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: record rank-consensus v9 evidence"
+          git pull --rebase
+          git push
