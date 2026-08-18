@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/hourly-selective-v8.yml'
       - 'forecast/train_hourly_selective_v8.py'
+      - 'forecast/run_hourly_selective_v8.py'
       - 'forecast/RUN_HOURLY_SELECTIVE_V8'
 
 permissions:
@@ -29,11 +30,11 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Train V8 selective side models
+      - name: Train V8 selective side models in staging
         shell: bash
         run: |
           set +e
-          python -m forecast.train_hourly_selective_v8 > /tmp/v8.log 2>&1
+          python -m forecast.run_hourly_selective_v8 > /tmp/v8.log 2>&1
           code=$?
           tail -c 15000 /tmp/v8.log > /tmp/v8_tail.log || true
           TRAIN_EXIT=$code python - <<'PY'
@@ -53,7 +54,7 @@ jobs:
           Path('docs/data/hourly_selective_v8_build_status.json').write_text(json.dumps(p,separators=(',',':')))
           PY
           exit 0
-      - name: Commit V8 evidence and promoted model only if earned
+      - name: Commit V8 staging evidence
         run: |
           git config user.name "phase1-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -61,7 +62,6 @@ jobs:
           test ! -f forecast/data/hourly_selective_v8.joblib || git add forecast/data/hourly_selective_v8.joblib
           test ! -f docs/data/hourly_selective_v8_validation.json || git add docs/data/hourly_selective_v8_validation.json
           test ! -f docs/data/hourly_selective_v8_status.json || git add docs/data/hourly_selective_v8_status.json
-          test ! -f forecast/data/intraday_signal_v3.joblib || git add forecast/data/intraday_signal_v3.joblib
           git diff --cached --quiet && exit 0
           git commit -m "data: record selective hourly model v8 evidence"
           git pull --rebase
