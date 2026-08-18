@@ -47,7 +47,7 @@ jobs:
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python scripts/github_live_forecast_v9.py
+        run: python scripts/github_live_forecast_v10.py
       - name: Recover stored fixed-time forecasts and update forward validation
         run: python forecast/update_forward_validation_v2.py
       - name: Commit live forecast and forward evidence
