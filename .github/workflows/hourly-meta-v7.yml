@@ -22,23 +22,59 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
+
       - name: Train rate-limit-independent hourly meta model
-        run: python forecast/train_hourly_meta_model_v7.py
-      - name: Commit frozen model and validation evidence
+        shell: bash
         run: |
-          test -f forecast/data/intraday_signal_v3.joblib
-          test -f docs/data/intraday_model_v3_validation.json
-          test -f docs/data/intraday_training_summary.json
-          test -f docs/data/intraday_dataset_audit.json
+          set +e
+          python forecast/train_hourly_meta_model_v7.py > /tmp/v7_train.log 2>&1
+          code=$?
+          tail -c 12000 /tmp/v7_train.log > /tmp/v7_tail.log || true
+          TRAIN_EXIT=$code python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          model = Path('forecast/data/intraday_signal_v3.joblib')
+          validation = Path('docs/data/intraday_model_v3_validation.json')
+          summary = Path('docs/data/intraday_training_summary.json')
+          audit = Path('docs/data/intraday_dataset_audit.json')
+          log = Path('/tmp/v7_tail.log').read_text(errors='replace') if Path('/tmp/v7_tail.log').exists() else ''
+          code = int(os.environ.get('TRAIN_EXIT', '999'))
+          success = code == 0 and model.exists() and validation.exists() and summary.exists() and audit.exists()
+          payload = {
+              'generated_at': datetime.now(timezone.utc).isoformat(),
+              'status': 'SUCCESS' if success else 'FAILED',
+              'trainer': 'forecast/train_hourly_meta_model_v7.py',
+              'exit_code': code,
+              'model_exists': model.exists(),
+              'validation_exists': validation.exists(),
+              'summary_exists': summary.exists(),
+              'audit_exists': audit.exists(),
+              'log_tail': log[-12000:],
+          }
+          Path('docs/data/hourly_meta_v7_build_status.json').write_text(json.dumps(payload, separators=(',', ':')))
+          PY
+          exit 0
+
+      - name: Commit model, validation evidence, and build status
+        shell: bash
+        run: |
           git config user.name "phase1-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add forecast/data/intraday_signal_v3.joblib docs/data/intraday_model_v3_validation.json docs/data/intraday_training_summary.json docs/data/intraday_dataset_audit.json
+          git add docs/data/hourly_meta_v7_build_status.json
+          test ! -f forecast/data/intraday_signal_v3.joblib || git add forecast/data/intraday_signal_v3.joblib
+          test ! -f docs/data/intraday_model_v3_validation.json || git add docs/data/intraday_model_v3_validation.json
+          test ! -f docs/data/intraday_training_summary.json || git add docs/data/intraday_training_summary.json
+          test ! -f docs/data/intraday_dataset_audit.json || git add docs/data/intraday_dataset_audit.json
           git diff --cached --quiet && exit 0
-          git commit -m "data: freeze bulk-hourly selective meta model v7"
+          git commit -m "data: record bulk-hourly meta model v7 build"
           git pull --rebase
           git push
