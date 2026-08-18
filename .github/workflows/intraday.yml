@@ -44,21 +44,45 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Build evidence-gated live forecast with numeric targets
+        shell: bash
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python scripts/github_live_forecast_v10.py
+        run: |
+          set +e
+          python scripts/github_live_forecast_v10.py > /tmp/live.log 2>&1
+          code=$?
+          tail -c 12000 /tmp/live.log > /tmp/live_tail.log || true
+          LIVE_EXIT=$code python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          code=int(os.environ.get('LIVE_EXIT','999'))
+          log=Path('/tmp/live_tail.log').read_text(errors='replace') if Path('/tmp/live_tail.log').exists() else ''
+          Path('docs/data/live_build_status.json').write_text(json.dumps({
+              'generated_at':datetime.now(timezone.utc).isoformat(),
+              'status':'SUCCESS' if code==0 and Path('docs/data/live_forecast.json').exists() else 'FAILED',
+              'exit_code':code,
+              'live_forecast_exists':Path('docs/data/live_forecast.json').exists(),
+              'log_tail':log[-12000:]},separators=(',',':')))
+          PY
+          exit 0
       - name: Recover stored fixed-time forecasts and update forward validation
-        run: python forecast/update_forward_validation_v2.py
-      - name: Commit live forecast and forward evidence
+        shell: bash
+        run: |
+          set +e
+          python forecast/update_forward_validation_v2.py
+          exit 0
+      - name: Commit live forecast, build status and forward evidence
         run: |
           test -f docs/data/live_forecast.json
-          test -f docs/data/forward_validation.json
           git config user.name "phase1-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add docs/data/live_forecast.json docs/data/forward_validation.json docs/data/forward_predictions.json
+          git add docs/data/live_forecast.json docs/data/live_build_status.json
+          test ! -f docs/data/forward_validation.json || git add docs/data/forward_validation.json
+          test ! -f docs/data/forward_predictions.json || git add docs/data/forward_predictions.json
           git diff --cached --quiet && exit 0
-          git commit -m "data: refresh live forecast and forward validation"
+          git commit -m "data: refresh evidence-gated live forecast"
           git pull --rebase
           git push
 
