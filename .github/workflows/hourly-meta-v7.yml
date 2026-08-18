@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/hourly-meta-v7.yml'
       - 'forecast/train_hourly_meta_model_v7.py'
+      - 'forecast/run_hourly_meta_v7.py'
       - 'forecast/RUN_HOURLY_META_V7'
 
 permissions:
@@ -34,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m forecast.train_hourly_meta_model_v7 > /tmp/v7_train.log 2>&1
+          python -m forecast.run_hourly_meta_v7 > /tmp/v7_train.log 2>&1
           code=$?
           tail -c 12000 /tmp/v7_train.log > /tmp/v7_tail.log || true
           TRAIN_EXIT=$code python - <<'PY'
@@ -52,7 +53,7 @@ jobs:
           payload = {
               'generated_at': datetime.now(timezone.utc).isoformat(),
               'status': 'SUCCESS' if success else 'FAILED',
-              'trainer': 'forecast/train_hourly_meta_model_v7.py',
+              'trainer': 'forecast/run_hourly_meta_v7.py',
               'exit_code': code,
               'model_exists': model.exists(),
               'validation_exists': validation.exists(),
