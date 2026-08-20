@@ -24,23 +24,23 @@ def main():
         hourly.main()
         return
 
-    # Directly run the last known-working live probability + numeric-target path.
-    # Experimental hourly models are never allowed to blank or overwrite usable rows
-    # unless their own evidence gate passes.
+    # Keep the last working probability + numeric-target engine active whenever a
+    # staged replacement has not earned promotion through its own evidence gate.
     stable.main()
     payload = json.loads(OUT.read_text())
     gate = activation_status()
     payload['production_model_policy'] = {
-        'status': 'STABLE_FALLBACK_ACTIVE',
+        'status': 'STABLE_MODEL_ACTIVE',
         'active_model': (payload.get('rows') or [{}])[0].get('probability_model', {}).get('model_version'),
         'staged_hourly_model': bundle_version(),
         'staged_model_accepted': False,
-        'rejection_reason': gate.get('reason'),
+        'staged_model_status': 'NOT_PROMOTED',
+        'staged_model_reason': gate.get('reason'),
         'policy': 'A staged model may replace production only after its own historical evidence gate passes; otherwise the working probability/target engine remains active.'
     }
-    payload['status'] = 'MODEL FORECASTS ACTIVE — STAGED UPGRADES REJECTED BY EVIDENCE GATE'
+    payload['status'] = 'MODEL FORECASTS ACTIVE — EVIDENCE-GATED PRODUCTION'
     payload['hourly_meta_v7_layer'] = {
-        'status': 'REJECTED_NOT_ACTIVE',
+        'status': 'STAGED_NOT_PROMOTED',
         'model_version': bundle_version(),
         'reason': gate.get('reason')
     }
