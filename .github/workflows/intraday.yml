@@ -2,6 +2,14 @@ name: Phase1 — Q-State challenger lab
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'requirements.txt'
+      - 'docs/index.html'
+      - 'scripts/qstate_client.py'
+      - '.github/workflows/intraday.yml'
   push:
     branches: [main]
     paths:
@@ -39,6 +47,7 @@ jobs:
           python scripts/qstate_client.py AAPL --timeframe 1D --smoke
 
   deploy-redirect:
+    if: github.event_name != 'pull_request'
     needs: validate-lab
     runs-on: ubuntu-latest
     environment:
