@@ -1,44 +1,41 @@
-# Phase1 — Institutional Stock Intelligence
+# Phase1 — Q-State Challenger Research Lab
 
-Public stock-analysis dashboard with two views:
+Phase1 is **not a production forecasting model** and no longer publishes an independent BUY/SELL, probability, price target, or stock-analysis view.
 
-1. **Institutional Screener** — ranks liquid US stocks by trend quality, relative strength, technical structure, risk and observable accumulation/distribution proxies.
-2. **Momentum Radar** — ranks stocks by momentum strength while showing a separate **confidence score** and evidence behind the score.
+The only production model is **Q-State Unified** in `samin110597-create/stock-truth-v2`:
 
-## Security architecture
+- Canonical terminal: https://samin110597-create.github.io/stock-truth-v2/quant/
+- Canonical Deno API: https://stock-truth-v2.samin110597.deno.net
+- Canonical model artifact: `stock-truth-v2/data/quant/model.json`
 
-API keys are never placed in `docs/`, browser JavaScript, URLs, localStorage or committed JSON. Market-data collection runs in GitHub Actions and reads credentials only from repository/environment secrets. The public website reads sanitized `docs/data/latest.json`.
+## Purpose
 
-Supported secret names (same provider convention as the earlier projects):
+Phase1 is an offline challenger/validation lab. Existing V2–V10 research code and evidence can be retained for reproducibility, but it has **zero production weight**.
 
-- `TWELVE_DATA_API_KEY`
-- `FINNHUB_API_KEY`
-- `FMP_API_KEY`
-- `POLYGON_API_KEY`
-- `ALPHA_VANTAGE_API_KEY`
+A Phase1 idea may influence production only when all of the following are true:
 
-The scanner still runs with public/fallback market data if those secrets are unavailable; cross-source validation is then marked unavailable and confidence is reduced rather than faked.
+1. feature timing is reproducible at decision time and passes leakage checks;
+2. validation is chronological with purging/embargo where required;
+3. the challenger beats the current Q-State baseline on untouched/OOS data;
+4. probability calibration is not worse;
+5. improvement is stable across more than one market regime and is not driven by one ticker/sector;
+6. ablation shows the new feature/model adds incremental value;
+7. the winning method is incorporated into the **single Q-State Unified artifact** and revalidated there.
 
-## What “institutional” means here
+Phase1 never becomes a second live model and does not vote with Q-State.
 
-The app does **not** claim to see private institutional order flow. Its Institutional Proxy score uses observable evidence: benchmark-relative strength, OBV/accumulation behaviour, up-volume vs down-volume, price/volume breakout quality, moving-average structure, volatility contraction/expansion and liquidity. Any reported ownership/filing data can be added only when a configured provider supplies it.
+## Shared data source
 
-## Accuracy rules
+New Phase1 experiments should use `scripts/qstate_client.py` to retrieve the same Deno-validated market and research context used by Q-State. Do not create a separate live provider-routing stack unless it is a temporary test fixture.
 
-- Momentum and confidence are different metrics.
-- Confidence is penalized for missing/stale data or cross-source disagreement.
-- No high-conviction label when data quality is low.
-- Signals are analytical rankings, not guaranteed predictions.
-- Future ML probability/target outputs must pass out-of-sample calibration/stability gates before the UI can call them verified.
+The Deno service performs request-time data routing, freshness checks, cross-provider validation, fundamentals retrieval, and macro context. API credentials remain outside browser code.
 
-## Structure
+## Reproducibility
 
-- `scripts/scan.py` — data collection + indicators + institutional/momentum/confidence scoring
-- `docs/index.html` — public dashboard
-- `docs/data/latest.json` — sanitized generated output
-- `.github/workflows/scan.yml` — scheduled scanner
-- `.github/workflows/pages.yml` — GitHub Pages deployment
+The currently serialized research bundles were created under scikit-learn 1.9.0. Runtime dependencies are pinned to that version to prevent silent estimator incompatibility. New challenger artifacts must record their Python/scikit-learn versions and training timestamp.
 
-## Schedule
+## Existing research assets
 
-The scan is scheduled for weekdays after the US market close and can also be run manually from GitHub Actions.
+Historical scripts, validation files, and forward logs remain available as evidence. They are research artifacts only and must not be described as the current production forecast.
+
+The GitHub Pages URL for this repository redirects to Q-State Unified so there is one user-facing forecast/research/analysis model.
