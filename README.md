@@ -1,41 +1,68 @@
-# Phase1 — Q-State Challenger Research Lab
+# Phase1 — Q-State Research & Validation Lab
 
-Phase1 is **not a production forecasting model** and no longer publishes an independent BUY/SELL, probability, price target, or stock-analysis view.
+**Phase1 is no longer a production forecasting model.** The production system is Q-State in `stock-truth-v2`.
 
-The only production model is **Q-State Unified** in `samin110597-create/stock-truth-v2`:
+Phase1 exists to improve that one model through controlled experiments, walk-forward validation, calibration checks, regime tests, failure analysis, and promotion reports. It must not publish a competing live BUY/SELL forecast, price target, or probability.
 
-- Canonical terminal: https://samin110597-create.github.io/stock-truth-v2/quant/
-- Canonical Deno API: https://stock-truth-v2.samin110597.deno.net
-- Canonical model artifact: `stock-truth-v2/data/quant/model.json`
+## Single-model relationship
 
-## Purpose
+```
+Q-State Deno canonical data
+        ↓
+Phase1 candidate research
+        ↓
+chronological walk-forward + calibration + regime validation
+        ↓
+promotion report
+        ↓
+validated change merged into Q-State
+```
 
-Phase1 is an offline challenger/validation lab. Existing V2–V10 research code and evidence can be retained for reproducibility, but it has **zero production weight**.
+The public-facing production forecast remains Q-State only.
 
-A Phase1 idea may influence production only when all of the following are true:
+## Research surfaces
 
-1. feature timing is reproducible at decision time and passes leakage checks;
-2. validation is chronological with purging/embargo where required;
-3. the challenger beats the current Q-State baseline on untouched/OOS data;
-4. probability calibration is not worse;
-5. improvement is stable across more than one market regime and is not driven by one ticker/sector;
-6. ablation shows the new feature/model adds incremental value;
-7. the winning method is incorporated into the **single Q-State Unified artifact** and revalidated there.
+1. **Institutional Screener** — descriptive ranking of liquid US stocks by trend quality, relative strength, technical structure, risk and observable accumulation/distribution proxies.
+2. **Momentum Radar** — descriptive momentum ranking with evidence and confidence diagnostics.
+3. **Candidate forecast experiments** — manual/research-only experiments. Their outputs are not production forecasts unless the validated logic is later merged into Q-State.
 
-Phase1 never becomes a second live model and does not vote with Q-State.
+## Canonical data source
 
-## Shared data source
+New research should use the same Deno market-data contract as Q-State whenever possible. `scripts/qstate_data_client.py` provides a small client for:
 
-New Phase1 experiments should use `scripts/qstate_client.py` to retrieve the same Deno-validated market and research context used by Q-State. Do not create a separate live provider-routing stack unless it is a temporary test fixture.
+- `/health`
+- `/v1/quote?symbol=...`
+- `/v1/market?symbol=...&timeframe=...`
 
-The Deno service performs request-time data routing, freshness checks, cross-provider validation, fundamentals retrieval, and macro context. API credentials remain outside browser code.
+Set `QSTATE_API_BASE` to the deployed Q-State Deno endpoint when overriding the default.
 
 ## Reproducibility
 
-The currently serialized research bundles were created under scikit-learn 1.9.0. Runtime dependencies are pinned to that version to prevent silent estimator incompatibility. New challenger artifacts must record their Python/scikit-learn versions and training timestamp.
+Persisted scikit-learn artifacts in this repository were created with scikit-learn 1.9.0. The runtime is pinned to that version to prevent silent cross-version deserialization drift.
 
-## Existing research assets
+## Security architecture
 
-Historical scripts, validation files, and forward logs remain available as evidence. They are research artifacts only and must not be described as the current production forecast.
+API keys are never placed in `docs/`, browser JavaScript, URLs, localStorage or committed JSON. Research collection reads credentials only from repository/environment secrets. The public website reads sanitized outputs.
 
-The GitHub Pages URL for this repository redirects to Q-State Unified so there is one user-facing forecast/research/analysis model.
+Supported secret names:
+
+- `TWELVE_DATA_API_KEY`
+- `FINNHUB_API_KEY`
+- `FMP_API_KEY`
+- `POLYGON_API_KEY`
+- `ALPHA_VANTAGE_API_KEY`
+
+## Accuracy rules
+
+- Research output must be labeled research-only until promoted into Q-State.
+- Momentum/confidence scores are not predictive probabilities.
+- Missing or stale data reduces confidence; it is never silently filled with fabricated facts.
+- A candidate model must beat the current Q-State baseline out of sample before promotion.
+- Chronological walk-forward validation, calibration, regime stability, and prospective evidence are required for predictive probabilities.
+- No candidate experiment may rewrite historical signals after outcomes are known.
+
+## Workflow policy
+
+`.github/workflows/intraday.yml` is manual-only. It can generate research evidence and update the research dashboard, but it does not run as a competing scheduled production forecaster.
+
+The scheduled production forecasting responsibility belongs to Q-State in `stock-truth-v2`.
